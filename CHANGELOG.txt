@@ -1,0 +1,16 @@
+## [1.1] - 2025-07-19
+### Added
+- XP system and leveling logic via XPManager
+- XP progress bar in UI
+- Offline earnings display on startup
+
+### Fixed
+- Total playtime bug where timer increased by 2s/sec
+- XP progress bar not updating on startup
+- Balance loading incorrect value from save file
+
+### Changed
+- Improved save/load system for XP, level, and time tracking
+
+### Known Issues
+- UI scroll performance may lag with many investments
