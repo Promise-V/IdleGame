@@ -9,6 +9,10 @@ import javafx.stage.Stage;
 
 import java.text.DecimalFormat;
 
+/**
+ * Main UI class for the Idle Game. Handles all JavaFX components,
+ * layout initialization, and live UI updates.
+ */
 public class IdleGameUI extends Application {
 
     private Player player;
@@ -18,6 +22,8 @@ public class IdleGameUI extends Application {
     private Label levelLabel;
     private ProgressBar xpProgress;
     private VBox statsContent;
+    private Label totalPlayTimeLabel;
+    private String formatted;
 
     public static void main(String[] args) {
         launch(args);
@@ -27,50 +33,58 @@ public class IdleGameUI extends Application {
     public void start(Stage primaryStage) {
         player = new Player();
         SaveManager.load(player);
-        double offlineEarnings = OfflineManager.calculateOfflineEarnings(player, SaveManager.getLastSavedTime());
-        player.addBalance(offlineEarnings);
-        player.statTracker.addToTotalEarnings(offlineEarnings);
+        player.statTracker.startSession();
+
+        if (SaveManager.getLastSavedTime() > 0) {
+            double offlineEarnings = OfflineManager.calculateOfflineEarnings(player, SaveManager.getLastSavedTime());
+            player.addBalance(offlineEarnings);
+            player.statTracker.addToTotalEarnings(offlineEarnings);
+            System.out.println("Offline earnings: " + offlineEarnings);
+        }
+
         gameEngine = new GameEngine(player);
         gameEngine.start();
 
-        VBox root = new VBox();
-        root.setSpacing(10);
+        setupUI(primaryStage);
+        startUIUpdater();
+    }
+
+    /**
+     * Initializes and lays out the UI components
+     */
+    private void setupUI(Stage stage) {
+        VBox root = new VBox(10);
         root.setPadding(new Insets(15));
         root.setAlignment(Pos.TOP_CENTER);
 
-        // Header
-        HBox header = new HBox();
-        header.setSpacing(10);
+        // Header elements
+        HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER);
 
-        balanceLabel = new Label("Balance: $" + (int)player.getBalance());
+        balanceLabel = new Label();
         balanceLabel.setFont(new Font(16));
 
-        levelLabel = new Label("Lvl " + player.getPlayerLevel());
+        levelLabel = new Label();
         levelLabel.setFont(new Font(16));
 
         xpProgress = new ProgressBar();
-        xpProgress.setProgress((double) player.getXP() / player.getXPToNextLevel());
         xpProgress.setPrefWidth(120);
 
         header.getChildren().addAll(balanceLabel, levelLabel, xpProgress);
 
-        // Stats dropdown
-        TitledPane statsPane = new TitledPane();
-        statsContent = new VBox();
-        statsContent.setSpacing(5);
+        // Stats panel
+        statsContent = new VBox(5);
         statsContent.getChildren().addAll(
-                new Label("Earnings: $" + (int)player.statTracker.getTotalEarnings()),
-                new Label("Investments: " + player.statTracker.getTotalInvestmentsPurchased()),
-                new Label("Upgrades: " + player.statTracker.getTotalUpgradesMade()),
-                new Label("Play Time: " + (player.statTracker.getTotalPlayTime() / 60) + "m")
+                new Label(), // Total Earnings placeholder
+                new Label(), // Total Investments
+                new Label(), // Total Upgrades
+                totalPlayTimeLabel = new Label()
         );
-        statsPane.setText("Stats");
-        statsPane.setContent(statsContent);
+
+        TitledPane statsPane = new TitledPane("Stats", statsContent);
 
         // Investment list
-        investmentList = new VBox();
-        investmentList.setSpacing(10);
+        investmentList = new VBox(10);
         ScrollPane investmentScroll = new ScrollPane(investmentList);
         investmentScroll.setFitToWidth(true);
         investmentScroll.setPrefHeight(400);
@@ -80,23 +94,27 @@ public class IdleGameUI extends Application {
         root.getChildren().addAll(header, statsPane, investmentScroll);
 
         Scene scene = new Scene(root, 300, 600);
-        primaryStage.setScene(scene);
-        primaryStage.setTitle("Idle Game");
-        primaryStage.setOnCloseRequest(e -> {
+        stage.setScene(scene);
+        stage.setTitle("Idle Game");
+        stage.setOnCloseRequest(e -> {
             player.statTracker.endSession();
             SaveManager.save(player);
             gameEngine.stop();
         });
-        primaryStage.show();
+        stage.show();
 
-        startUIUpdater();
+        // Initial update
+        updateHeader();
     }
 
+    /**
+     * Renders owned and purchasable investments into the UI
+     */
     private void renderInvestments() {
         investmentList.getChildren().clear();
-        for (Investment inv : player.ownedInvestments.values()) {
-            VBox box = new VBox();
-            box.setSpacing(5);
+
+        for (Investment inv : player.getOwnedInvestments().values()) {
+            VBox box = new VBox(5);
             box.setStyle("-fx-border-color: black; -fx-padding: 10;");
 
             Label nameLabel = new Label(inv.getName());
@@ -115,12 +133,11 @@ public class IdleGameUI extends Application {
         }
 
         for (InvestmentType type : InvestmentType.values()) {
-            if (!player.ownedInvestments.containsKey(type)) {
+            if (!player.getOwnedInvestments().containsKey(type)) {
                 Investment inv = InvestmentFactory.create(type);
                 if (inv == null) continue;
 
-                VBox box = new VBox();
-                box.setSpacing(5);
+                VBox box = new VBox(5);
                 box.setStyle("-fx-border-color: gray; -fx-padding: 10;");
 
                 Label nameLabel = new Label(inv.getName());
@@ -139,6 +156,9 @@ public class IdleGameUI extends Application {
         }
     }
 
+    /**
+     * Updates all UI fields in real time (every second)
+     */
     private void startUIUpdater() {
         Thread uiThread = new Thread(() -> {
             while (true) {
@@ -147,20 +167,30 @@ public class IdleGameUI extends Application {
                 } catch (InterruptedException e) {
                     break;
                 }
-                javafx.application.Platform.runLater(() -> {
-                    balanceLabel.setText("Balance: $" + (int)player.getBalance());
-                    levelLabel.setText("Lvl " + player.getPlayerLevel());
-                    xpProgress.setProgress((double) player.getXP() / player.getXPToNextLevel());
-                    Label earningsLabel = (Label) statsContent.getChildren().getFirst();
-                    DecimalFormat df = new DecimalFormat("#.00");
-                    earningsLabel("Total Earnings: $" + df.format(player.statTracker.getTotalEarnings()));
-                });
+                javafx.application.Platform.runLater(this::updateHeader);
             }
         });
         uiThread.setDaemon(true);
         uiThread.start();
     }
 
-    private void earningsLabel(String s) {
+    /**
+     * Updates header stats like balance, level, XP bar, etc.
+     */
+    private void updateHeader() {
+        DecimalFormat df = new DecimalFormat("#.00");
+
+        balanceLabel.setText("Balance: $" + (int) player.getBalance());
+        levelLabel.setText("Lvl " + player.getPlayerLevel());
+        xpProgress.setProgress((double) player.getXP() / player.getXPToNextLevel());
+
+        ((Label) statsContent.getChildren().get(0)).setText("Earnings: $" + df.format(player.statTracker.getTotalEarnings()));
+        ((Label) statsContent.getChildren().get(1)).setText("Investments: " + player.statTracker.getTotalInvestmentsPurchased());
+        ((Label) statsContent.getChildren().get(2)).setText("Upgrades: " + player.statTracker.getTotalUpgradesMade());
+
+        long totalSeconds = player.statTracker.getLivePlayTime();
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        totalPlayTimeLabel.setText("Play Time: " + minutes + "m " + seconds + "s");
     }
 }

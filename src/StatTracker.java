@@ -1,50 +1,107 @@
+/**
+ * Tracks gameplay statistics for a player such as play time, upgrades, earnings, and investments.
+ */
 public class StatTracker {
+
     private long sessionStartTime;
-    private long totalPlayTime;
+    private long totalPlayTime; // in seconds
+    private boolean sessionStarted = false;
+
     private int totalUpgrades;
-    private int totalBuys;
+    private int totalInvestments;
     private double totalMoneyEarned;
-    private int totalNumberOfInvestments;
-    public void startSession(){
-        sessionStartTime = System.currentTimeMillis();
+
+    /**
+     * Starts a new session timer.
+     */
+    public void startSession() {
+        if (!sessionStarted) {
+            sessionStartTime = System.currentTimeMillis();
+            sessionStarted = true;
+        }
     }
-    public void endSession(){
-        int sessionTimeInSeconds = (int)((System.currentTimeMillis() - sessionStartTime) / 1000);
-        totalPlayTime += sessionTimeInSeconds;
+
+    /**
+     * Ends the session and adds session duration to total play time.
+     */
+    public void endSession() {
+        if (sessionStarted) {
+            long sessionDuration = (System.currentTimeMillis() - sessionStartTime) / 1000;
+            totalPlayTime += sessionDuration;
+            sessionStarted = false;
+        }
     }
+
+    /**
+     * @return total time played including current session, in seconds.
+     */
+    public long getLivePlayTime() {
+        if (sessionStarted) {
+            long currentSession = (System.currentTimeMillis() - sessionStartTime) / 1000;
+            return totalPlayTime + currentSession;
+        }
+        return totalPlayTime;
+    }
+
+    /**
+     * Returns total play time in "Xm Ys" format.
+     */
+    public String getFormattedPlayTime() {
+        long totalSeconds = getLivePlayTime();
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        return minutes + "m " + seconds + "s";
+    }
+
+    // --- Stat Incrementation ---
+
+    public void incrementTotalUpgrades() {
+        totalUpgrades++;
+    }
+
+    public void incrementTotalInvestments() {
+        totalInvestments++;
+    }
+
+    public void addToTotalEarnings(double earnings) {
+        totalMoneyEarned += earnings;
+    }
+
+    // --- Getters ---
+
     public long getTotalPlayTime() {
         return totalPlayTime;
     }
-    public double getTotalEarnings() {
-        return totalMoneyEarned;
-    }
-    public int getTotalInvestmentsPurchased() {
-        return totalNumberOfInvestments;
-    }
-    public void addToTotalEarnings(double earnings){
-        totalMoneyEarned += earnings;
-    }
+
     public int getTotalUpgradesMade() {
         return totalUpgrades;
     }
+
+    public int getTotalInvestmentsPurchased() {
+        return totalInvestments;
+    }
+
+    public double getTotalEarnings() {
+        return totalMoneyEarned;
+    }
+
+    // --- Setters (used by SaveManager) ---
 
     public void setTotalPlayTime(long playTime) {
         this.totalPlayTime = playTime;
     }
 
+    public void setTotalUpgrades(int upgrades) {
+        this.totalUpgrades = upgrades;
+    }
+
+    public void setTotalNumberOfInvestments(int investments) {
+        this.totalInvestments = investments;
+    }
+
     public void setTotalEarnings(double earnings) {
         this.totalMoneyEarned = earnings;
     }
-    public void setTotalNumberOfInvestments(int numberOfInvestments){
-        this.totalNumberOfInvestments = numberOfInvestments;
-    }
-    public void incrementTotalNumberOfInvestments(){
-        totalNumberOfInvestments++;
-    }
-    public void incrementTotalUpgrades(){
-        totalUpgrades++;
-    }
-    public void setTotalUpgrades(int totalUpgrades){
-        this.totalUpgrades = totalUpgrades;
-    }
+
+
 }
